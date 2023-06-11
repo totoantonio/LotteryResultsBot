@@ -3,7 +3,7 @@ from telegram import Update, Bot
 from telegram.ext import Updater, CommandHandler, CallbackContext
 
 # Telegram API token from the environment variable
-TOKEN = os.environ.get('6193225487:AAE7PXJICy_lUsYjq8iH5ry5sPRWwSrBFaM')
+TOKEN = os.environ.get('TELEGRAM_TOKEN')
 
 # Command handler for the /start command
 def start_command(update: Update, context: CallbackContext):
