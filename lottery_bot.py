@@ -81,7 +81,7 @@ class PCSOLotto:
             winners = columns[4].text.strip()
             jackpot_date = columns[2].text.strip()
 
-            # Store the results in the dictionary
+            # Store the result in the dictionary
             results[game_name] = {
                 'Result': result,
                 'Jackpot': jackpot,
@@ -91,124 +91,77 @@ class PCSOLotto:
 
         return results
 
-# Create an instance of PCSOLotto
-lotto = PCSOLotto()
 
 def start(update, context):
     """Handler for the /start command."""
-    # Define the reply keyboard options
-    options = [['/selection', '/games']]
-    reply_markup = ReplyKeyboardMarkup(options, one_time_keyboard=True)
+    reply_keyboard = [[game] for game in lotto.games_list.values()]
+    markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True, resize_keyboard=True)
+    context.bot.send_message(chat_id=update.effective_chat.id, text="Hello, I am Capt. Jack Pott. I am on Beta release. I can give Lotto Results for today, yesterday or 3 days ago game. Choose game list in the menu.", reply_markup=markup)
+    return 0
 
-    # Send the start message
-    context.bot.send_message(
-        chat_id=update.effective_chat.id,
-        text="Welcome to PCSO Lottery Bot! Please select an option:",
-        reply_markup=reply_markup
-    )
+def select_game(update, context):
+    """Handler for selecting a game from the menu."""
+    game_name = update.message.text
+    game_id = list(lotto.games_list.keys())[list(lotto.games_list.values()).index(game_name)]
+    results = lotto.scrape_results(today.month, today.year, today.month, today.year)
+    if not results:
+        results = lotto.scrape_results(yesterday.month, yesterday.year, yesterday.month, yesterday.year)
+        if not results:
+            results = lotto.scrape_results(three_days_ago.month, three_days_ago.year, three_days_ago.month, three_days_ago.year)
 
-    # Return the corresponding state
+    if results:
+        for game, result in results.items():
+            if game == game_name:
+                message = f"<b>{game}</b>\n\n"
+                message += f"<pre>Combinations: {result['Result']}</pre>\n"
+                message += f"<pre>Draw Date: {result['Jackpot Date']}</pre>\n"
+                message += f"<pre>Jackpot (₱): {result['Jackpot']}</pre>\n"
+                message += f"<pre>Winners: {result['Winners']}</pre>\n"
+                break
+        else:
+            message = f"No results found for {game_name}."
+    else:
+        message = f"No results found for {game_name}."
+
+    # Send the result message
+    context.bot.send_message(chat_id=update.effective_chat.id, text=message, parse_mode='HTML')
+
+    # Remove the ReplyKeyboardMarkup
+    context.bot.send_message(chat_id=update.effective_chat.id, text="You can always access the Menu in the message panel area.",
+                             reply_markup=ReplyKeyboardRemove())
+
     return 0
 
 def selection(update, context):
     """Handler for the /selection command."""
-    # Define the reply keyboard options
-    options = [
-        ['/ultra', '/grand'],
-        ['/super', '/mega'],
-        ['/lotto', '/6d'],
-        ['/4d', '/3d'],
-        ['/2d', '/back']
-    ]
-    reply_markup = ReplyKeyboardMarkup(options, one_time_keyboard=True)
-
-    # Send the selection message
-    context.bot.send_message(
-        chat_id=update.effective_chat.id,
-        text="Please select a game:",
-        reply_markup=reply_markup
-    )
-
-    # Return the corresponding state
-    return 1
-
-def select_game(update, context):
-    """Handler for selecting a game."""
-    game_name = update.message.text.lower()
-
-    if game_name in lotto.games_list.values():
-        # Game is valid, proceed with retrieving the results
-        game_id = list(lotto.games_list.keys())[list(lotto.games_list.values()).index(game_name)]
-
-        # Get the current month and year
-        now = datetime.now()
-        start_month = now.month
-        start_year = now.year
-
-        # Get the previous month and year
-        previous_month = now.month - 1 if now.month > 1 else 12
-        previous_year = now.year if now.month > 1 else now.year - 1
-
-        # Scrape the results for the current and previous month
-        results_current_month = lotto.scrape_results(start_month, start_year, start_month, start_year)
-        results_previous_month = lotto.scrape_results(previous_month, previous_year, previous_month, previous_year)
-
-        # Prepare the message for the results
-        message = f"Results for {game_name}:\n"
-
-        if results_current_month:
-            message += f"\nCurrent Month ({calendar.month_name[start_month]} {start_year}):\n"
-            message += format_results(results_current_month.get(game_name))
-
-        if results_previous_month:
-            message += f"\nPrevious Month ({calendar.month_name[previous_month]} {previous_year}):\n"
-            message += format_results(results_previous_month.get(game_name))
-
-        # Send the results message
-        context.bot.send_message(chat_id=update.effective_chat.id, text=message, parse_mode='HTML')
-
-    else:
-        # Game is not valid, send an error message
-        context.bot.send_message(
-            chat_id=update.effective_chat.id,
-            text="Invalid game selection. Please try again.",
-            reply_markup=ReplyKeyboardRemove()
-        )
-
-    # Return to the selection state
-    return 1
-
-def format_results(result):
-    """Formats the lottery results into a readable format."""
-    if result:
-        table = PrettyTable()
-        table.field_names = ["Result", "Jackpot", "Winners", "Jackpot Date"]
-        table.add_row(
-            [result['Result'], result['Jackpot'], result['Winners'], result['Jackpot Date']]
-        )
-        return f"<pre>{table}</pre>"
-    else:
-        return "No results found."
+    reply_keyboard = [[game] for game in lotto.games_list.values()]
+    markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True, resize_keyboard=True)
+    context.bot.send_message(chat_id=update.effective_chat.id, text="Please select a game from the menu.", reply_markup=markup)
+    return 0
 
 def games(update, context):
     """Handler for the /games command."""
     game_list = "\n".join(lotto.games_list.values())
-    context.bot.send_message(
-        chat_id=update.effective_chat.id,
-        text="<b>Games Available</b>\n" + game_list,
-        parse_mode='HTML'
-    )
+    message = "<b>Games Available</b>\n\n" + game_list + "\n\nTo get the result, choose from the game menu."
+    context.bot.send_message(chat_id=update.effective_chat.id, text=message, parse_mode='HTML')
 
-def unrecognized(update, context):
+def unknown(update, context):
     """Handler for unrecognized messages."""
-    context.bot.send_message(
-        chat_id=update.effective_chat.id,
-        text="Unrecognized command. The menu is always accessible in the message bar."
-    )
+    context.bot.send_message(chat_id=update.effective_chat.id, text="Sorry, I don't have conversation functions just yet. Please choose from the menu.")
+    
 
-def error(update, context):
-    """Handler for errors."""
-    print(f"Update {update} caused error {context.error}")
+
+# Create the PCSO Lotto instance
+lotto = PCSOLotto()
+
+# Set up the Telegram bot
+telegram_token = os.getenv('TOKEN')
+updater = Updater(token=telegram_token, use_context=True)
+
+# Get today's date
+today = datetime.now().date()
+yesterday = today - timedelta(days=1)
+three_days_ago = today - timedelta(days=3)
 
 # Create the conversation handler
 conv_handler = ConversationHandler(
@@ -220,35 +173,19 @@ conv_handler = ConversationHandler(
     fallbacks=[CommandHandler('start', start)]  # Add a fallback command handler for unexpected input
 )
 
-def main():
-    """Starts the bot and adds the conversation handler."""
-    # Get the Telegram bot token from environment variables
-    token = os.getenv('TOKEN')
+# Add the conversation handler to the updater
+updater.dispatcher.add_handler(conv_handler)
+unknown_handler = MessageHandler(Filters.text & (~Filters.command), unknown)
 
-    # Create an updater and pass the token
-    updater = Updater(token=token, use_context=True)
+updater.dispatcher.add_handler(CommandHandler('games', games))
 
-    # Get the dispatcher to register handlers
-    dispatcher = updater.dispatcher
 
-    # Add the conversation handler to the dispatcher
-    dispatcher.add_handler(conv_handler)
+# Add the unknown_handler to the dispatcher as well
+updater.dispatcher.add_handler(unknown_handler)
 
-    # Add the games command handler
-    dispatcher.add_handler(CommandHandler('games', games))
 
-    # Add the unrecognized message handler
-    dispatcher.add_handler(MessageHandler(Filters.all, unrecognized))
 
-    # Add the error handler
-    dispatcher.add_error_handler(error)
 
-    # Start the bot
-    updater.start_polling()
-
-    # Run the bot until Ctrl+C is pressed
-    updater.idle()
-
-# Run the main function
-if __name__ == '__main__':
-    main()
+# Start the bot
+updater.start_polling()
+updater.idle()
