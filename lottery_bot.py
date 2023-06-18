@@ -94,49 +94,57 @@ class PCSOLotto:
 
 def start(update, context):
     """Handler for the /start command."""
+    username = update.effective_user.username
     reply_keyboard = [[game] for game in lotto.games_list.values()]
     markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True, resize_keyboard=True)
-    context.bot.send_message(chat_id=update.effective_chat.id, text="Hello, I am Capt. Jack Pott. I am on Beta release. I can give Lotto Results for today, yesterday or 3 days ago game. Choose game list in the menu.", reply_markup=markup)
+    context.bot.send_message(chat_id=update.effective_chat.id, text=f"Hello, {username}! I am Capt. Jack Pott. I can give Lotto Results for today, yesterday, or 3 days ago. Choose a game from the menu.", reply_markup=markup)
     return 0
 
 def select_game(update, context):
     """Handler for selecting a game from the menu."""
     game_name = update.message.text
-    game_id = list(lotto.games_list.keys())[list(lotto.games_list.values()).index(game_name)]
-    results = lotto.scrape_results(today.month, today.year, today.month, today.year)
-    if not results:
-        results = lotto.scrape_results(yesterday.month, yesterday.year, yesterday.month, yesterday.year)
-        if not results:
-            results = lotto.scrape_results(three_days_ago.month, three_days_ago.year, three_days_ago.month, three_days_ago.year)
 
-    if results:
-        for game, result in results.items():
-            if game == game_name:
-                message = f"<b>{game}</b>\n\n"
-                message += f"<pre>Combinations: {result['Result']}</pre>\n"
-                message += f"<pre>Draw Date: {result['Jackpot Date']}</pre>\n"
-                message += f"<pre>Jackpot (₱): {result['Jackpot']}</pre>\n"
-                message += f"<pre>Winners: {result['Winners']}</pre>\n"
-                break
+    # Check if the selected game is "/start" command
+    if game_name == "/start":
+        return start(update, context)  # Redirect to the start function
+
+    # Check if the selected game is "/games" command
+    if game_name == "/games":
+        return games(update, context)  # Redirect to the games function
+
+    # Check if the selected game is a valid game
+    if game_name in lotto.games_list.values():
+        game_id = list(lotto.games_list.keys())[list(lotto.games_list.values()).index(game_name)]
+        results = lotto.scrape_results(today.month, today.year, today.month, today.year)
+        if not results:
+            results = lotto.scrape_results(yesterday.month, yesterday.year, yesterday.month, yesterday.year)
+            if not results:
+                results = lotto.scrape_results(three_days_ago.month, three_days_ago.year, three_days_ago.month, three_days_ago.year)
+
+        if results:
+            for game, result in results.items():  # Iterate over dictionary items instead of keys
+                if game == game_name:
+                    message = f"<b>{game}</b>\n\n"
+                    message += f"<pre>Combinations: {result['Result']}</pre>\n"
+                    message += f"<pre>Draw Date: {result['Jackpot Date']}</pre>\n"
+                    message += f"<pre>Jackpot (₱): {result['Jackpot']}</pre>\n"
+                    message += f"<pre>Winners: {result['Winners']}</pre>\n"
+                    break
+            else:
+                message = f"No results found for {game_name}."
         else:
             message = f"No results found for {game_name}."
     else:
-        message = f"No results found for {game_name}."
+        message = f"Invalid game. Please select a game from the menu."
 
     # Send the result message
     context.bot.send_message(chat_id=update.effective_chat.id, text=message, parse_mode='HTML')
-
-    # Remove the ReplyKeyboardMarkup
-    context.bot.send_message(chat_id=update.effective_chat.id, text="You can always access the Menu in the message panel area.",
-                             reply_markup=ReplyKeyboardRemove())
-
-    return 0
-
-def selection(update, context):
-    """Handler for the /selection command."""
+    
+    # Show the game menu again
     reply_keyboard = [[game] for game in lotto.games_list.values()]
     markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True, resize_keyboard=True)
-    context.bot.send_message(chat_id=update.effective_chat.id, text="Please select a game from the menu.", reply_markup=markup)
+    context.bot.send_message(chat_id=update.effective_chat.id, text="This is a Beta (β) Release. Bugs are expected. Please report them by sending a message to @alfiesuperhalk", reply_markup=markup)
+
     return 0
 
 def games(update, context):
@@ -144,11 +152,6 @@ def games(update, context):
     game_list = "\n".join(lotto.games_list.values())
     message = "<b>Games Available</b>\n\n" + game_list + "\n\nTo get the result, choose from the game menu."
     context.bot.send_message(chat_id=update.effective_chat.id, text=message, parse_mode='HTML')
-
-def unknown(update, context):
-    """Handler for unrecognized messages."""
-    context.bot.send_message(chat_id=update.effective_chat.id, text="Sorry, I don't have conversation functions just yet. Please choose from the menu.")
-    
 
 
 # Create the PCSO Lotto instance
@@ -167,24 +170,16 @@ three_days_ago = today - timedelta(days=3)
 conv_handler = ConversationHandler(
     entry_points=[CommandHandler('start', start)],
     states={
-        0: [CommandHandler('selection', selection)],
-        1: [MessageHandler(Filters.text, select_game)]
+        0: [MessageHandler(Filters.text, select_game)]
     },
-    fallbacks=[CommandHandler('start', start)]  # Add a fallback command handler for unexpected input
+    fallbacks=[ConversationHandler.END]  # Add ConversationHandler.END as the fallback state
 )
 
 # Add the conversation handler to the updater
 updater.dispatcher.add_handler(conv_handler)
-unknown_handler = MessageHandler(Filters.text & (~Filters.command), unknown)
 
+# Add the /games command handler
 updater.dispatcher.add_handler(CommandHandler('games', games))
-
-
-# Add the unknown_handler to the dispatcher as well
-updater.dispatcher.add_handler(unknown_handler)
-
-
-
 
 # Start the bot
 updater.start_polling()
