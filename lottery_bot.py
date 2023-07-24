@@ -11,11 +11,14 @@ from telegram.ext import CommandHandler, ConversationHandler, Filters, MessageHa
 # Load environment variables from .env file
 load_dotenv()
 
+
 class PCSOLotto:
+
     def __init__(self, link='https://www.pcso.gov.ph/SearchLottoResult.aspx'):
         self.link = link
         self.headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.71 Safari/537.36'
+            'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.71 Safari/537.36'
         }
         self.games_list = {
             58: 'Ultra Lotto 6/58',
@@ -92,16 +95,59 @@ class PCSOLotto:
         return results
 
 
+# Create the PCSO Lotto instance
+lotto = PCSOLotto()
+
+# Set up the Telegram bot
+telegram_token = os.getenv('TOKEN')
+updater = Updater(token=telegram_token, use_context=True)
+
+ # Configure logging
+import logging
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.ERROR)
+
+# Get today's date
+today = datetime.now().date()
+yesterday = today - timedelta(days=1)
+three_days_ago = today - timedelta(days=3)
+
+# Maintain a set of recorded usernames
+recorded_usernames = set()
+
+# Function to handle the /start command
 def start(update, context):
     """Handler for the /start command."""
     username = update.effective_user.username
+    chat_id = update.effective_chat.id
+
+    # Check if the username is not None and not empty
+    if username:
+        with open('usernames.txt', 'r') as file:
+            # Use a list comprehension to extract valid usernames
+            usernames = set(line.strip().split()[1] for line in file if len(line.strip().split()) >= 2)
+
+        # Check if the username is not already recorded
+        if username not in usernames:
+            with open('usernames.txt', 'a') as file:
+                file.write(f'{chat_id} {username}\n')
+
     reply_keyboard = [[game] for game in lotto.games_list.values()]
-    markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True, resize_keyboard=True)
-    context.bot.send_message(chat_id=update.effective_chat.id, text=f"Hello, {username}! I am Capt. Jack Pott. I can give Lotto Results for today, yesterday, or 3 days ago. Choose a game from the menu.", reply_markup=markup)
+    markup = ReplyKeyboardMarkup(reply_keyboard,
+                                 one_time_keyboard=True,
+                                 resize_keyboard=True)
+    context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text=f"Hello, {username}! I am Capt. Jack Pott. I can give Lotto Results for today, yesterday, or 3 days ago. Choose a game from the menu.",
+        reply_markup=markup)
     return 0
 
+
+
+# Function to handle game selection
 def select_game(update, context):
     """Handler for selecting a game from the menu."""
+    username = update.effective_user.username
+
     game_name = update.message.text
 
     # Check if the selected game is "/start" command
@@ -122,7 +168,7 @@ def select_game(update, context):
                 results = lotto.scrape_results(three_days_ago.month, three_days_ago.year, three_days_ago.month, three_days_ago.year)
 
         if results:
-            for game, result in results.items():  # Iterate over dictionary items instead of keys
+            for game, result in results.items():
                 if game == game_name:
                     message = f"<b>{game}</b>\n\n"
                     message += f"<pre>Combinations: {result['Result']}</pre>\n"
@@ -139,47 +185,116 @@ def select_game(update, context):
 
     # Send the result message
     context.bot.send_message(chat_id=update.effective_chat.id, text=message, parse_mode='HTML')
-    
+
     # Show the game menu again
     reply_keyboard = [[game] for game in lotto.games_list.values()]
     markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True, resize_keyboard=True)
-    context.bot.send_message(chat_id=update.effective_chat.id, text="This is a Beta (β) Release. Bugs are expected. Please report them by sending a message to @alfiesuperhalk", reply_markup=markup)
+    context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text="This is a Beta (β) Release. Bugs are expected. Please report them by sending a message to @alfiesuperhalk",
+        reply_markup=markup)
 
     return 0
 
+# Function to handle the /games command
 def games(update, context):
     """Handler for the /games command."""
     game_list = "\n".join(lotto.games_list.values())
     message = "<b>Games Available</b>\n\n" + game_list + "\n\nTo get the result, choose from the game menu."
     context.bot.send_message(chat_id=update.effective_chat.id, text=message, parse_mode='HTML')
 
+def save_new_chat_members(update, context):
+    for new_member in update.message.new_chat_members:
+        chat_id = new_member.id
+        username = new_member.username
 
-# Create the PCSO Lotto instance
-lotto = PCSOLotto()
+        # Check if the username is not None and not empty
+        if username:
+            with open('usernames.txt', 'r') as file:
+                # Use a list comprehension to extract valid usernames
+                usernames = set(line.strip().split(None, 1)[1] for line in file if len(line.strip().split(None, 1)) >= 2)
 
-# Set up the Telegram bot
-telegram_token = os.getenv('TOKEN')
-updater = Updater(token=telegram_token, use_context=True)
+            # Check if the username is not already recorded
+            if username not in usernames:
+                with open('usernames.txt', 'a') as file:
+                    file.write(f'{chat_id} {username}\n')
 
-# Get today's date
-today = datetime.now().date()
-yesterday = today - timedelta(days=1)
-three_days_ago = today - timedelta(days=3)
+
+# Function to handle the /broadcast command
+def broadcast_message(update, context):
+    """Handler for broadcasting a message to saved usernames."""
+    if update.effective_user.username == 'alfiesuperhalk':
+        with open('usernames.txt', 'r') as f:
+            usernames = f.readlines()
+
+        # Use a set to store unique chat_ids
+        chat_ids = set()
+        for line in usernames:
+            parts = line.strip().split(None, 1)
+            if len(parts) >= 2:
+                chat_id = parts[0]
+                username = parts[1]
+                try:
+                    # Convert the chat_id to an integer
+                    chat_id = int(chat_id)
+                    # Add the valid chat_id to the set
+                    chat_ids.add(chat_id)
+                except ValueError:
+                    # If the chat_id is not a valid integer, skip it
+                    continue
+
+        # Check if there are users to send the broadcast
+        if chat_ids:
+            message = update.message.text.strip()
+            if message.startswith('/broadcast'):
+                message = message[len('/broadcast'):].strip()
+
+            for chat_id in chat_ids:
+                # Send the message to each user by chat_id
+                context.bot.send_message(chat_id=chat_id, text=message)
+
+            context.bot.send_message(chat_id=update.effective_chat.id, text="Broadcast successful.")
+        else:
+            context.bot.send_message(chat_id=update.effective_chat.id, text="No users to send the broadcast.")
+    else:
+        context.bot.send_message(chat_id=update.effective_chat.id, text="Sorry, you don't have permission to broadcast messages.")
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 # Create the conversation handler
 conv_handler = ConversationHandler(
     entry_points=[CommandHandler('start', start)],
-    states={
-        0: [MessageHandler(Filters.text, select_game)]
-    },
-    fallbacks=[ConversationHandler.END]  # Add ConversationHandler.END as the fallback state
+    states={0: [MessageHandler(Filters.text & ~Filters.command, select_game)]},
+    fallbacks=[],
 )
 
-# Add the conversation handler to the updater
+# Add the conversation handler to the dispatcher
 updater.dispatcher.add_handler(conv_handler)
 
 # Add the /games command handler
 updater.dispatcher.add_handler(CommandHandler('games', games))
+
+# Add the /broadcast command handler
+updater.dispatcher.add_handler(CommandHandler('broadcast', broadcast_message))
+
+
+
+# Create the ChatMemberHandler to handle new chat members
+chat_member_handler = MessageHandler(Filters.status_update.new_chat_members, save_new_chat_members)
+
+# Add the ChatMemberHandler to the dispatcher
+updater.dispatcher.add_handler(chat_member_handler)
 
 # Start the bot
 updater.start_polling()
